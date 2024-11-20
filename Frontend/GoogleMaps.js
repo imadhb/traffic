@@ -47,38 +47,60 @@ const GoogleMapsScreen = () => {
 
   const getDirections = async () => {
     if (!originCoords || !destinationCoords) {
-      alert("Please select both origin and destination.");
+      Alert.alert("Error", "Please select both origin and destination.");
       return;
     }
-
+  
     try {
-      const response = await fetch(
+      // Fetch directions from Google Maps API
+      const directionsResponse = await fetch(
         `https://maps.googleapis.com/maps/api/directions/json?origin=${originCoords.latitude},${originCoords.longitude}&destination=${destinationCoords.latitude},${destinationCoords.longitude}&departure_time=now&key=${GOOGLE_MAPS_API_KEY}`
       );
-      const data = await response.json();
-
-      if (data.routes.length > 0) {
-        const points = data.routes[0].overview_polyline.points;
+      const directionsData = await directionsResponse.json();
+  
+      if (directionsData.routes.length > 0) {
+        const points = directionsData.routes[0].overview_polyline.points;
         setRouteCoordinates(decodePolyline(points));
-
-        const routeInfo = data.routes[0].legs[0]; // First leg of the route
-        const duration = routeInfo.duration.text;
+  
+        const routeInfo = directionsData.routes[0].legs[0]; // First leg of the route
+        const duration = routeInfo.duration.text; // Duration in human-readable format
         const durationInTraffic = routeInfo.duration_in_traffic
           ? routeInfo.duration_in_traffic.text
           : "N/A";
-
+  
+        // Fetch AI-based prediction from backend
+        const predictionResponse = await fetch("http://10.0.2.2:5000/predict", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            origin,
+            destination,
+            originCoords,
+            destinationCoords,
+          }),
+        });
+        const predictionData = await predictionResponse.json();
+  
+        // Convert predicted traffic time from seconds to minutes
+        const predictedTimeInMinutes = predictionData.predicted_traffic_time
+          ? Math.max(0, Math.round(predictionData.predicted_traffic_time / 60))
+          : "N/A";
+  
         Alert.alert(
           "Traffic Information",
-          `Estimated time: ${duration}\nTime with traffic: ${durationInTraffic}`
+          `Estimated time: ${duration}\nTime with traffic: ${durationInTraffic}\nPredicted Traffic Time (AI): ${predictedTimeInMinutes} minutes`
         );
       } else {
-        alert("No route found.");
+        Alert.alert("Error", "No route found.");
       }
     } catch (error) {
-      console.error("Error fetching directions with traffic:", error);
-      alert("Failed to fetch directions.");
+      console.error("Error fetching directions or predictions:", error);
+      Alert.alert("Error", "Failed to fetch traffic information.");
     }
   };
+  
 
   const decodePolyline = (encoded) => {
     let points = [];
@@ -121,12 +143,12 @@ const GoogleMapsScreen = () => {
       <MapView
         style={styles.map}
         initialRegion={{
-          latitude: 42.3314, // Example: Detroit, MI
+          latitude: 42.3314,
           longitude: -83.0458,
           latitudeDelta: 0.5,
           longitudeDelta: 0.5,
         }}
-        showsTraffic // Enables traffic layer
+        showsTraffic
       >
         {originCoords && <Marker coordinate={originCoords} title="Origin" />}
         {destinationCoords && <Marker coordinate={destinationCoords} title="Destination" />}
@@ -136,7 +158,6 @@ const GoogleMapsScreen = () => {
       </MapView>
 
       <View style={styles.inputContainer}>
-        {/* Origin Input */}
         <TextInput
           style={styles.input}
           placeholder="Enter Origin"
@@ -161,8 +182,6 @@ const GoogleMapsScreen = () => {
             </TouchableOpacity>
           )}
         />
-
-        {/* Destination Input */}
         <TextInput
           style={styles.input}
           placeholder="Enter Destination"
@@ -187,7 +206,6 @@ const GoogleMapsScreen = () => {
             </TouchableOpacity>
           )}
         />
-
         <Button title="Get Directions with Traffic" onPress={getDirections} />
       </View>
     </View>
